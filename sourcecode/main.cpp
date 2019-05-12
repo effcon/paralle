@@ -1,98 +1,99 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <fstream>
 #include <unistd.h>
 #include <pthread.h>
+#include <sys/time.h>
 
-static long numSteps = 10000000;
-double steps = 1.0/double (numSteps);
-double sum =0.0;
+#define numSteps  100000000
+#define maxthread 40000
+double steps = 1.0/ numSteps;
 int  stepByThread;
-pthread_mutex_t sum_lock = PTHREAD_MUTEX_INITIALIZER;
 
 
-void* calculate_pi(void*);
+pthread_t mythread[maxthread];
+double sum[maxthread];
+int thread_nums[100];
+FILE* fpt;
 
 
 
-void  calculate_thread_num(int thread_num)
+void* calculate_Pi(void* arg)
 {
-    pthread_t mythread[thread_num];
-    int pos[thread_num];
+    int* pArg = (int*)arg;
 
-    time_t start,end;
-
-    start = clock();
-
-    stepByThread = numSteps/thread_num;
+    int pos = *pArg;
+    int begin =pos*stepByThread;
+    int end = begin+stepByThread;
 
     int i;
-    for(i=0;i<thread_num;++i)
-    {
+    double x;
 
-        pos[i]=i*stepByThread;
-        pthread_create(&mythread[i],NULL,calculate_pi,(void*)(pos+i));
-        pthread_join(mythread[i],NULL);
+
+
+    for(i=begin;i<end;++i)
+    {
+        x = (i+0.5)*steps;
+        sum[pos] = sum[pos]+4.0/(1+x*x);
     }
 
-    end =clock();
-
-
-    sum = sum*steps;
-    double costTime = double(end -start)/CLOCKS_PER_SEC;
-
-    printf("cost time:%lf s\n",costTime);
-    printf("ans:%.15f\n",sum);
+    delete pArg;
 }
 
-void* calculate_pi(void* arg)
+
+void calculate(int n)
 {
-    int a =*(int*)arg;
-
+    timeval start,end;
     int i;
-    for(i=a;i<a+stepByThread;++i)
+    gettimeofday(&start,NULL);
+
+    for(i=0;i<n;++i)
     {
-       double x;
-
-       x =(i+0.5)*steps;
-
-       pthread_mutex_lock(&sum_lock);
-       sum =sum+4/(1+x*x);
-       pthread_mutex_unlock(&sum_lock);
+        int * p =new int ;
+        *p =i;
+        sum[i]=0;
+        pthread_create(&mythread[i],NULL,calculate_Pi,(void *)p);
     }
 
-    return NULL;
+
+    double total =0.0;
+    for(i=0;i<n;++i)
+    {
+        pthread_join(mythread[i],NULL);
+        total =total+sum[i];
+    }
+    gettimeofday(&end,NULL);
+
+    total =total*steps;
+
+    const long persec =1000000;
+    double costtime =(double)((end.tv_sec-start.tv_sec)*persec+end.tv_usec-start.tv_usec)/persec;
+
+
+
+    fprintf(fpt,"thread num: %d cost time:%.6f ans %.15lf\n",n,(double)costtime,total);
 }
 
 
 int main()
 {
-/*
-    pthread_t mythread[n];
-    int pos[n];
-
-    //   pthread_create(&mythread,NULL,calculate_pi,(int*)&start);
-
-
-    time_t start,end;
-
-    start = clock();
-
 
     int i;
-    for(i=0;i<n;++i)
-    {
 
-        pos[i]=i*stepByThread;
-        pthread_create(&mythread[i],NULL,calculate_pi,(void*)(pos+i));
-        pthread_join(mythread[i],NULL);
-    }
-
-    end =clock();
+    for(i=0;i<10;++i)
+        thread_nums[i]=i+1;
+    for(i=10;i<100;++i)
+        thread_nums[i]=thread_nums[i-1]*1.1;
 
 
-    sum = sum*steps;
-    printf("cost time:%lf s\n",double(end -start)/CLOCKS_PER_SEC);
-    printf("ans:%.15f\n",sum);*/
 
-   calculate_thread_num(3);
+     int n;
+     fpt = fopen("result.txt","w");
+
+     for(i=0;i<100;++i) {
+
+         n= thread_nums[i];
+         stepByThread = numSteps / n;
+         calculate(n);
+     }
 }
